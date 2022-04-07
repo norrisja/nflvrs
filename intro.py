@@ -4,6 +4,7 @@ from matplotlib.ticker import MaxNLocator
 import pandas as pd
 import numpy as np
 import seaborn as sns
+from kmeans import KMeans as kmeans
 
 # data = pd.read_csv('nfl_2021_pbp.csv.gz', compression='gzip', low_memory=False)
 #
@@ -50,24 +51,22 @@ class NFLVRS:
     def _isolate_players(self, players):
         return self.df[(self.df['passer'].isin(players)) |
                        (self.df['rusher'].isin(players)) |
-                       (self.df['receiver'].isin(players))]
+                       (self.df['receiver'].isin(players))].copy()
 
     def _isolate_passers(self, players):
-        return self.df[(self.df['passer'].isin(players))]
+        return self.df[(self.df['passer'].isin(players))].copy()
 
     def _isolate_rushers(self, players):
-        return self.df[(self.df['rusher'].isin(players))]
+        return self.df[(self.df['rusher'].isin(players))].copy()
 
     def _isolate_receivers(self, players):
-        return self.df[(self.df['receiver'].isin(players))]
+        return self.df[(self.df['receiver'].isin(players))].copy()
 
     def _map_color(self):
         self.df['color'] = self.df['posteam'].replace(NFLVRS.COLORS)
 
     def _demean_col(self, col):
-        print(self.df[col].mean())
         self.df[col] = self.df[col].sub(self.df[col].mean(), fill_value=0)
-        print(self.df[col])
 
     def filter(self, passers=[], rushers=[], receivers=[],
                min_pass_attempts=None, min_completions=0,
@@ -208,10 +207,28 @@ class NFLVRS:
         fig.tight_layout()
         fig.show()
 
-    def tier_qbs(self, k, based_on):
+    def tier_qbs(self, k, min_throws=400):
         """ K-Means algo to separate qbs into k tiers. """
 
-        pass
+        self.df = self.df[self.df.groupby('passer')['passer'].transform('size') >= min_throws]
+
+
+
+        league_grouped = self.df.groupby(['passer']).agg({'qb_epa': 'mean', 'cpoe': 'mean'}).reset_index()
+        league_grouped['game_num'] = league_grouped.groupby('passer').cumcount() + 1
+        league_grouped.reset_index(inplace=True)
+        # league_grouped = league_grouped[~((league_grouped['passer'] == 'C.Keenum') & (league_grouped['season'] == 2020)
+        #                                   | (league_grouped['passer'] == 'J.Brissett') & (league_grouped['season'] == 2020))]
+        X = league_grouped[['cpoe', 'qb_epa']].values.tolist()
+        labels = league_grouped['passer'] #+ ' ' + league_grouped['season'].astype('str')
+        labels = labels.values.tolist()
+        # k = kmeans.KMeans(X=X, labels=labels, k_clusters=k)
+        k = kmeans(X=X, labels=labels, k_clusters=k)
+        k.cluster()
+        print(k.clusters)
+        k.visualize_wcss()
+        k.visualize()
+
 
 
     ## Compare effectiveness of rushes on first down with effectiveness of passing on first down
@@ -221,12 +238,16 @@ class NFLVRS:
 
 
 if __name__=="__main__":
-    nflvrs = NFLVRS(start_year=2018, end_year=2021, plt_theme='Solarize_Light2')
+    nflvrs = NFLVRS(start_year=2017, end_year=2022, plt_theme='Solarize_Light2')
+
     # nflvrs.plot_epa_per_game(['T.Brady', 'A.Rodgers',
     #                           'M.Jones', 'T.Lawrence',
     #                           'T.Tagovailoa', 'J.Herbert'], subplots=True, n=2)
 
     # nflvrs.plot_epa_per_game(players=['T.Brady', 'M.Jones'], subplots=True, min_throws=500, n=2, show_league=False)
-    nflvrs.plot_epa_per_game(players=['L.Jackson', 'P.Mahomes'], subplots=False, min_throws=500, n=1, show_league=True)
-    nflvrs.plot_epa_per_game(players=['J.Herbert', 'J.Allen'], subplots=False, min_throws=500, n=1, show_league=True)
-    nflvrs.plot_epa_vs_cpoe(players=['T.Brady', 'M.Stafford', 'A.Rodgers'], min_throws=500, show_league=False)
+    # nflvrs.plot_epa_per_game(players=['L.Jackson', 'P.Mahomes'], subplots=False, min_throws=500, n=1, show_league=True)
+    nflvrs.plot_epa_per_game(players=['R.Wilson', 'D.Carr', 'J.Herbert', 'P.Mahomes'], subplots=False, min_throws=500, n=2, show_league=True)
+    nflvrs.plot_epa_per_game(players=['R.Wilson', 'D.Carr', 'J.Herbert', 'P.Mahomes'], subplots=False, min_throws=500, n=2, show_league=False)
+    nflvrs.plot_epa_per_game(players=['R.Wilson', 'D.Carr', 'J.Herbert', 'P.Mahomes'], subplots=True, min_throws=500, n=2, show_league=False)
+    nflvrs.plot_epa_vs_cpoe(players=['R.Wilson', 'D.Carr', 'J.Herbert', 'P.Mahomes'], min_throws=500, show_league=False)
+    # nflvrs.tier_qbs(k=5)
